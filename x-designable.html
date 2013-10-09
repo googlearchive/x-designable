@@ -8,6 +8,7 @@ license that can be found in the LICENSE file.
     <style>
       @host {
         * {
+          position: relative;
           outline: none;
           background-image: url(grid.png);
           -webkit-user-select: none
@@ -124,7 +125,7 @@ license that can be found in the LICENSE file.
         // it's nobody else's event
         event.stopPropagation();
         // acquire target
-        var elt = this.findTrackableElement(event.target);
+        var elt = this.findDraggableElement(event.target);
         if (elt) {
           this.drag(this.createDragObject(elt));
           this.selected = elt;
@@ -156,7 +157,7 @@ license that can be found in the LICENSE file.
         var filter = container.meta && container.meta.childFilter;
         return (!filter || filter(elt));
       },
-      findTrackableElement: function(target) {
+      findDraggableElement: function(target) {
         // nominal target
         var elt = target;
         // try to match selection on drag
