@@ -79,12 +79,7 @@ license that can be found in the LICENSE file.
             // install element in container
             container.appendChild(element);
           }
-          var s = element.style;
-          s.pointerEvents = '';
-          // designer is absolutely positioned, ad-hoc
-          if (container !== this) {
-            s.left = s.top = s.position = '';
-          }
+          this.decorateElement(element);
           // ideally we only notify one change on drop
           // the selection changing will cause a notify
           // if the selection is not changing, but we
@@ -94,6 +89,52 @@ license that can be found in the LICENSE file.
           }
           this.selected = element;
           return true;
+        }
+      },
+      decorateElement: function(element) {
+        var s = element.style;
+        s.pointerEvents = '';
+        // designer is absolutely positioned, ad-hoc
+        if (element.parentNode !== this) {
+          s.left = s.top = s.position = '';
+        }
+        // apply unique id
+        this.applyUniqueId(element);
+        Array.prototype.filter.call(element.children, function(c) {
+            return ['style'].indexOf(c.localName) < 0;
+          }).forEach(this.applyUniqueId.bind(this));
+        this.marshalNodeReferences(this);
+      },
+      // stuffs required for making binding to work, ad-hoc
+      applyUniqueId: function(node) {
+        if (!node.id) {
+          node.id = this.makeUniqueId(this, node.localName
+            .replace(/^g-/, '').replace(/-/g, '_'));
+        }
+      },
+      makeUniqueId: function(node, id, suffix) {
+        var uId = id + (suffix || '');
+        var query = window.ShadowDOMPolyfill ? node.impl.querySelector :
+          node.querySelector;
+        var scope = window.ShadowDOMPolyfill ? document.body : node;
+        return query.call(scope, '#' + uId) ?
+          this.makeUniqueId(node, id, suffix ? ++suffix : 1) :
+          uId;
+      },
+      applyPropertyBinding: function(target, name, path) {
+        if (name === 'textContent') {
+          if (path) {
+            target.textContent = ' ';
+            target = target.firstChild;
+          } else {
+            target.firstChild.unbind(name);
+          }
+        } else {
+          target.unbind(name);
+          target.removeAttribute(name);
+        }
+        if (path) {
+          target.bind(name, this, path);
         }
       },
       // events
