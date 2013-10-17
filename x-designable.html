@@ -103,6 +103,8 @@ license that can be found in the LICENSE file.
         Array.prototype.filter.call(element.children, function(c) {
             return ['style'].indexOf(c.localName) < 0;
           }).forEach(this.applyUniqueId.bind(this));
+      },
+      update: function() {
         this.marshalNodeReferences(this);
       },
       // stuffs required for making binding to work, ad-hoc
