@@ -97,6 +97,7 @@ license that can be found in the LICENSE file.
         var s = element.style;
         s.pointerEvents = '';
         // designer is absolutely positioned, ad-hoc
+        s.position = 'absolute';
         if (element.parentNode !== this) {
           s.left = s.top = s.position = '';
         }
