@@ -52,23 +52,45 @@ license that can be found in the LICENSE file.
           this.selected = e;
         }
       },
+      update: function() {
+        this.marshalNodeReferences(this);
+      },
+      //
+      // abstracted drag API
+      //
+      // `track` events are triggered at the source of the drag, so 
+      // any object that wants to support dragging 'designable' objects
+      // implements the 'track' events but delegates the work to 
+      // callbacks that 'drag' populates on the drag object (dragInfo).
+      //
+      // drag-sources are x-pallete and x-designable
+      //
       drag: function(dragInfo) {
+        // TODO(sjmiles): store in instance variable?
         this.dragInfo = dragInfo;
-        //
+        // drag avatar
+        // TODO(sjmiles): if this is an element from the design-canvas, it's immediately
+        // pulled out of it's original context
         this.appendChild(dragInfo.element);
         //
-        var origin = dragInfo.origin || dragInfo.element.getBoundingClientRect();
+        // calculate a starting origin in the frame of 'this'
         var local = this.getBoundingClientRect();
+        // TODO(sjmiles): why the conditional?
+        var origin = dragInfo.origin; // || dragInfo.element.getBoundingClientRect();
         dragInfo.start = {x: origin.left - local.left, y: origin.top - local.top};
+        //console.log(origin, dragInfo.start, local);
         //
+        // contextualize utility method
+        var snap = this.snap.bind(this);
+        // attach drag handler to the dragInfo
         dragInfo.drag = function(event) {
-          var p = this.snap(
-            this.dragInfo.start.x + event.dx,
-            this.dragInfo.start.y + event.dy
+          var p = snap(
+            this.start.x + event.dx,
+            this.start.y + event.dy
           );
-          this.dragInfo.element.style.left = p.x + 'px';
-          this.dragInfo.element.style.top = p.y + 'px';
-        }.bind(this);
+          this.element.style.left = p.x + 'px';
+          this.element.style.top = p.y + 'px';
+        };
       },
       drop: function(element, event) {
         var container = this.findContainer(element, event.target);
@@ -91,6 +113,7 @@ license that can be found in the LICENSE file.
           return true;
         }
       },
+      //
       decorateElement: function(element) {
         var s = element.style;
         s.pointerEvents = '';
@@ -104,9 +127,6 @@ license that can be found in the LICENSE file.
         Array.prototype.filter.call(element.children, function(c) {
             return ['style'].indexOf(c.localName) < 0;
           }).forEach(this.applyUniqueId.bind(this));
-      },
-      update: function() {
-        this.marshalNodeReferences(this);
       },
       // stuffs required for making binding to work, ad-hoc
       applyUniqueId: function(node) {
@@ -168,12 +188,27 @@ license that can be found in the LICENSE file.
       trackStart: function(event) {
         // it's nobody else's event
         event.stopPropagation();
+        //console.dir(event);
         // acquire target
         var elt = this.findDraggableElement(event.target);
         if (elt) {
-          this.drag(this.createDragObject(elt));
+          var dragInfo = this.createDragObject(elt);
+          //
+          var px = event.pageX - dragInfo.origin.left;
+          if (px < 4 || px > dragInfo.origin.width -4) {
+            console.log(px);
+            return;
+          }
+          //
+          var style = elt.style;
+          style.position = 'absolute';
+          style.pointerEvents = 'none';
+          style.transition = 'none';
+          style.webkitTransition = 'none';
+          //
+          this.drag(dragInfo);
           this.selected = elt;
-          Platform.flush();
+          //Platform.flush();
         }
       },
       track: function(event) {
@@ -228,11 +263,6 @@ license that can be found in the LICENSE file.
       },
       createDragObject: function(elt) {
         var rect = elt.getBoundingClientRect();
-        var style = elt.style;
-        style.position = 'absolute';
-        style.pointerEvents = 'none';
-        style.transition = 'none';
-        style.webkitTransition = 'none';
         return {
           origin: rect,
           element: elt
@@ -244,10 +274,10 @@ license that can be found in the LICENSE file.
           y: Math.round(inY / this.grid) * this.grid
         }
       },
-      editorElements: {input:1, select: 1, textarea: 1},
       nodeIsEditor: function(node) {
         return node.isEditor || this.editorElements[node.localName];
-      }
+      },
+      editorElements: {input:1, select: 1, textarea: 1}
     });
   </script>
 </polymer-element>
