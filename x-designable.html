@@ -157,7 +157,7 @@ license that can be found in the LICENSE file.
           target.removeAttribute(name);
         }
         if (path) {
-          target.bind(name, this, path);
+          target.bind(name, new PathObserver(this, path));
         }
       },
       // events
