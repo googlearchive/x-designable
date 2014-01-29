@@ -18,9 +18,13 @@ license that can be found in the LICENSE file.
     <content></content>
   </template>
   <script>
+  (function() {
     Polymer('x-designable', {
       grid: 10,
       selected: null,
+      ready: function() {
+        this.meta = document.createElement('x-meta');
+      },
       // communication
       notify: function() {
         this.fire('design-change', this);
@@ -28,6 +32,13 @@ license that can be found in the LICENSE file.
       // state
       selectedChanged: function(old) {
         this.classFollows(this.selected, old, 'selected-element');
+        if (old) {
+          //this.syncStyle(old);
+        }
+        if (this.selected) {
+          this.ruleForElement(this.selected);
+          //this.syncStyle(this.selected);
+        }
         this.notify();
       },
       // commands
@@ -38,6 +49,7 @@ license that can be found in the LICENSE file.
           //  this.clearElement();
           //} else {
             e.parentNode.removeChild(e);
+            forSubtree(e, this.removeElementRule.bind(this));
             this.selected = null;
           //}
         }
@@ -71,7 +83,9 @@ license that can be found in the LICENSE file.
         // drag avatar
         // TODO(sjmiles): if this is an element from the design-canvas, it's immediately
         // pulled out of it's original context
-        this.appendChild(dragInfo.element);
+        if (dragInfo.element.parentNode != this) {
+          this.appendChild(dragInfo.element);
+        }
         //
         // calculate a starting origin in the frame of 'this'
         var local = this.getBoundingClientRect();
@@ -82,17 +96,20 @@ license that can be found in the LICENSE file.
         //
         // contextualize utility method
         var snap = this.snap.bind(this);
+        var ruleForElement = this.ruleForElement.bind(this);
         // attach drag handler to the dragInfo
         dragInfo.drag = function(event) {
           var p = snap(
             this.start.x + event.dx,
             this.start.y + event.dy
           );
-          this.element.style.left = p.x + 'px';
-          this.element.style.top = p.y + 'px';
+          var rule = ruleForElement(this.element);
+          rule.style.left = p.x + 'px';
+          rule.style.top = p.y + 'px';
         };
       },
       drop: function(element, event) {
+        this.style.overflow = 'hidden';
         var container = this.findContainer(element, event.target);
         if (container && this.canContain(container, element)) {
           // don't manipulate parentNode if not necessary
@@ -109,21 +126,22 @@ license that can be found in the LICENSE file.
           if (!sameParent && this.selected === element) {
             this.notify();
           }
+          //this.syncStyle(element);
           this.selected = element;
           return true;
         }
       },
       //
       decorateElement: function(element) {
-        var s = element.style;
-        s.pointerEvents = '';
+        var s = this.ruleForElement(element).style;
+        s.pointerEvents = null;
+        s.transition = null;
+        s.webkitTransition = null;
         // designer is absolutely positioned, ad-hoc
         s.position = 'absolute';
         if (element.parentNode !== this) {
           s.left = s.top = s.position = '';
         }
-        // apply unique id
-        this.applyUniqueId(element);
         Array.prototype.filter.call(element.children, function(c) {
             return ['style'].indexOf(c.localName) < 0;
           }).forEach(this.applyUniqueId.bind(this));
@@ -137,6 +155,7 @@ license that can be found in the LICENSE file.
       },
       makeUniqueId: function(node, id, suffix) {
         var uId = id + (suffix || '');
+        // TODO(sorvell): why the polyfill intrusion?
         var query = window.ShadowDOMPolyfill ? node.impl.querySelector :
           node.querySelector;
         var scope = window.ShadowDOMPolyfill ? document.body : node;
@@ -206,11 +225,7 @@ license that can be found in the LICENSE file.
             return;
           }
           //
-          var style = elt.style;
-          style.position = 'absolute';
-          style.pointerEvents = 'none';
-          style.transition = 'none';
-          style.webkitTransition = 'none';
+          this.makeElementDraggable(elt);
           //
           this.drag(dragInfo);
           this.selected = elt;
@@ -225,11 +240,24 @@ license that can be found in the LICENSE file.
       trackEnd: function(event) {
         if (this.dragInfo) {
           event.stopPropagation();
-          this.drop(this.dragInfo, event);
+          //this.drop(this.dragInfo.element, event);
+          // TODO(sorvell): delete if we drag out of canvas area
+          // we'll need to refine this when dragging onto the tree becomes
+          // supported.
+          this.deleteElement();
           this.dragInfo = null;
         }
       },
       // utility
+      makeElementDraggable: function(element) {
+        var s = this.ruleForElement(element).style;
+        s.position = 'absolute';
+        s.pointerEvents = 'none';
+        s.transition = 'none';
+        s.webkitTransition = 'none';
+        // show elements
+        this.style.overflow = null;
+      },
       findContainer: function(element, container) {
         while (container) {
           if (container === this || element !== container && container.meta && container.meta.isContainer) {
@@ -283,7 +311,131 @@ license that can be found in the LICENSE file.
       nodeIsEditor: function(node) {
         return node.isEditor || this.editorElements[node.localName];
       },
-      editorElements: {input:1, select: 1, textarea: 1}
+      editorElements: {input: 1, select: 1, textarea: 1},
+      loadHtml: function(html) {
+        // TODO(sorvell): what should we bind to? for right now, we bind
+        // to 'this', but we should bind to some element that we're designing...
+        var template = document.createElement('template');
+        template.bindingDelegate = this.syntax;
+        template.innerHTML = html;
+        this.innerHTML = '';
+        // make imports go...
+        this.loadElementImports(template.content, function() {
+          this.appendChild(template.createInstance(this));
+          executeScriptsInScope(this);
+          this.meta.ensureMeta(this);
+          this.update();
+          this.notify();
+        }.bind(this));
+      },
+      loadElementImports: function(element, callback) {
+        var pending = 1;
+        var receive = function() {
+          pending--;
+          checkDone();
+        }
+        var checkDone = function() {
+          if (pending == 0 && callback) {
+            callback();
+          }
+        };
+        var n$ = element.querySelectorAll('*');
+        for (var i=0, l=n$.length, n, m; (i<l) && (n=n$[i]); i++) {
+          m = this.meta.byId(n.localName);
+          if (m && !m.importsLoaded) {
+            pending++;
+            m.loadImports(receive);
+          }
+        }
+        receive();
+      },
+      setupStyleElement: function() {
+        var s = this.querySelector('style');
+        if (!s) {
+          s = document.createElement('style');
+          s.textContent = ' ';
+          this.insertBefore(s, this.firstElementChild);
+        }
+        this.styleElement = s;
+      },
+      ruleForElement: function(element) {
+        return element.__styleRule || (element.__styleRule = 
+            this.findElementRule(element));
+      },
+      findElementRule: function(element) {
+        if (!this.styleElement) {
+          this.setupStyleElement();
+        }
+        if (!element.id) {
+          this.applyUniqueId(element);
+        }
+        var re = new RegExp('#' + element.id + '(\\s|{)');
+        var sheet = this.styleElement.sheet;
+        var rules = sheet.cssRules;
+        var i = this.indexOfRule(rules, '#' + element.id);
+        if (i < 0) {
+          i = rules.length;
+        }
+        if (!rules[i]) {
+          sheet.insertRule('#' + element.id + '{' + element.style.cssText + '}',
+            i);
+        }
+        element.style.cssText = '';
+        return rules[i];
+      },
+      removeElementRule: function(element) {
+        var sheet = this.styleElement.sheet, rules = sheet.cssRules;
+        var i = this.indexOfRule(rules, '#' + element.id);
+        if (i >= 0) {
+          sheet.deleteRule(i);
+        }
+      },
+      indexOfRule: function(rules, selector) {
+        for (var i=0, l=rules.length; i < l; i++) {
+          if (rules[i].selectorText == selector) {
+            return i;
+          }
+        }
+        return -1;
+      }
     });
+
+    function executeScriptsInScope(scope) {
+      // make scripts go....
+      var s$ = scope.querySelectorAll('script:not([src])');
+      for (var i=0, l=s$.length, s; (i<l) && (s=s$[i]); i++) {
+        replaceAndExecuteScript(s);
+      }
+    }
+
+    function replaceAndExecuteScript(script) {
+      var newScript = document.createElement('script');
+      script.parentNode.replaceChild(newScript, script);
+      newScript.textContent = script.textContent;
+    }
+
+    function cssTextFromStyle(style) {
+      var sheet = style && style.sheet;
+      if (sheet) {
+        var rules = sheet.cssRules;
+        for (var i=0, css=[]; i < rules.length; i++) {
+          css.push(rules[i].cssText);
+        }
+        return css.join('\n\n');
+      }
+    }
+
+    function forSubtree(element, callback) {
+      if (callback) {
+        callback(element);
+        var element = element.firstElementChild;
+        while (element) {
+          forSubtree(element, callback);
+          element = element.nextElementSibling;
+        }
+      }
+    }
+    
+  })();
   </script>
 </polymer-element>
