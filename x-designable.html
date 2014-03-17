@@ -19,6 +19,10 @@ license that can be found in the LICENSE file.
   </template>
   <script>
   (function() {
+
+    // turn on binding reflection;
+    Platform.enableBindingsReflection = true;
+
     Polymer('x-designable', {
       grid: 10,
       selected: null,
@@ -172,11 +176,19 @@ license that can be found in the LICENSE file.
             target.firstChild.unbind(name);
           }
         } else {
-          target.unbind(name);
+          this.unbindElementProperty(target, name);
           target.removeAttribute(name);
         }
         if (path) {
           target.bind(name, new PathObserver(this, path));
+        }
+      },
+      // Node.bind no longer provides unbinding but we need this concept
+      // here so we unbind by closing the bound observer.
+      unbindElementProperty: function(target, name) {
+        if (target.bindings_ && target.bindings_[name]) {
+          target.bindings_[name].close();
+          target.bindings_[name] = null;
         }
       },
       // events
