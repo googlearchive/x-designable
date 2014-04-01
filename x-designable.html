@@ -36,12 +36,8 @@ license that can be found in the LICENSE file.
       // state
       selectedChanged: function(old) {
         this.classFollows(this.selected, old, 'selected-element');
-        if (old) {
-          //this.syncStyle(old);
-        }
         if (this.selected) {
           this.ruleForElement(this.selected);
-          //this.syncStyle(this.selected);
         }
         this.notify();
       },
@@ -130,7 +126,6 @@ license that can be found in the LICENSE file.
           if (!sameParent && this.selected === element) {
             this.notify();
           }
-          //this.syncStyle(element);
           this.selected = element;
           return true;
         }
@@ -146,9 +141,14 @@ license that can be found in the LICENSE file.
         if (element.parentNode !== this) {
           s.left = s.top = s.position = '';
         }
+        var self = this;
+        function decorate(element) {
+          self.applyUniqueId(element);
+          self.ruleForElement(element);
+        }
         Array.prototype.filter.call(element.children, function(c) {
             return ['style'].indexOf(c.localName) < 0;
-          }).forEach(this.applyUniqueId.bind(this));
+          }).forEach(decorate);
       },
       // stuffs required for making binding to work, ad-hoc
       applyUniqueId: function(node) {
