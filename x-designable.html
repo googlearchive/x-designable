@@ -330,6 +330,7 @@ license that can be found in the LICENSE file.
         var template = document.createElement('template');
         template.bindingDelegate = this.syntax;
         template.innerHTML = html;
+        this.sanitizeContent(template.content);
         this.innerHTML = '';
         // make imports go...
         this.loadElementImports(template.content, function() {
@@ -339,6 +340,13 @@ license that can be found in the LICENSE file.
           this.update();
           this.notify();
         }.bind(this));
+      },
+      sanitizeContent: function(element) {
+        // remove imports so that we don't have to keep track of them
+        var imports = element.querySelectorAll('link[rel=import]').array();
+        imports.forEach(function(i) {
+          i.remove();
+        });
       },
       loadElementImports: function(element, callback) {
         var pending = 1;
